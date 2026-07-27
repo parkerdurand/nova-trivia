@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nova Trivia — Alias Tester</title>
+</head>
+<body>
+
+<h1>Alias Tester (dev tool, not part of the real game)</h1>
+<p>Pick a subject, type a guess the way a player might type it, and see how the matcher scores it.
+This does not touch the real game's saved progress.</p>
+
+<div>
+  <label for="subjectSelect">Subject:</label>
+  <select id="subjectSelect"></select>
+</div>
+
+<div>
+  <label for="acceptedList">Accepted answer + aliases:</label>
+  <pre id="acceptedList"></pre>
+</div>
+
+<div>
+  <input type="text" id="guessInput" autocomplete="off" placeholder="Type a guess" style="width: 300px;">
+  <button id="checkBtn">Check</button>
+</div>
+
+<div id="result" style="margin-top: 1em; font-size: 1.2em;"></div>
+<div id="detail" style="color: #555;"></div>
+
+<script>
+
+// ------------------------------------------------------------
+// Same subject data as nova-trivia.html (copied here so this
+// standalone tester doesn't depend on or affect the real game).
+// ------------------------------------------------------------
+const SUBJECTS = [
+  {
+    id: "jay-wright",
+    category: "Villanova Men's Basketball",
+    answer: "Jay Wright",
+    aliases: ["jay wright", "wright", "coach wright", "coach jay wright"]
+  },
+  {
+    id: "jenkins-shot",
+    category: "Villanova Basketball Moments",
+    answer: "Kris Jenkins' Buzzer-Beater",
+    aliases: [
+      "kris jenkins buzzer beater",
+      "kris jenkins shot",
+      "kris jenkins",
+      "the shot",
+      "jenkins shot",
+      "2016 buzzer beater",
+      "kris jenkins buzzer-beater"
+    ]
+  },
+  {
+    id: "1985-championship",
+    category: "Villanova Basketball History",
+    answer: "The 1985 National Championship",
+    aliases: [
+      "1985 national championship",
+      "1985 championship",
+      "1985 title",
+      "villanova 1985",
+      "the 1985 national championship game"
+    ]
+  },
+  {
+    id: "rollie-massimino",
+    category: "Villanova Basketball History",
+    answer: "Rollie Massimino",
+    aliases: ["rollie massimino", "massimino", "coach massimino", "rollie"]
+  },
+  {
+    id: "main-line",
+    category: "Villanova Location & Campus",
+    answer: "The Main Line",
+    aliases: ["the main line", "main line", "philadelphia main line", "the philly main line", "philly main line"]
+  },
+  {
+    id: "divincenzo-2018",
+    category: "Villanova Basketball Moments",
+    answer: "Donte DiVincenzo",
+    aliases: ["donte divincenzo", "divincenzo", "big ragu", "donte divencenzo"]
+  },
+  {
+    id: "villanova-founding",
+    category: "Villanova University History",
+    answer: "Villanova University's Founding (1842)",
+    aliases: ["villanova university", "villanova", "1842", "the founding of villanova", "villanova's founding", "founding of villanova university"]
+  },
+  {
+    id: "big-east",
+    category: "Villanova Athletics",
+    answer: "The Big East Conference",
+    aliases: ["the big east", "big east", "big east conference", "the big east conference"]
+  },
+  {
+    id: "ed-pinckney",
+    category: "Villanova Basketball History",
+    answer: "Ed Pinckney",
+    aliases: ["ed pinckney", "pinckney", "edward pinckney"]
+  },
+  {
+    id: "school-of-business",
+    category: "Villanova Academics",
+    answer: "Villanova School of Business",
+    aliases: ["villanova school of business", "school of business", "vsb", "villanova business school"]
+  },
+  {
+    id: "josh-hart",
+    category: "Villanova Basketball Moments",
+    answer: "Josh Hart",
+    aliases: ["josh hart", "hart"]
+  },
+  {
+    id: "st-thomas-church",
+    category: "Villanova Location & Campus",
+    answer: "St. Thomas of Villanova Church",
+    aliases: ["st thomas of villanova church", "st. thomas of villanova church", "the church", "villanova church", "st thomas church", "saint thomas of villanova church"]
+  },
+  {
+    id: "bradley-cooper",
+    category: "Villanova Notable Alumni",
+    answer: "Bradley Cooper",
+    aliases: ["bradley cooper", "cooper"]
+  },
+  {
+    id: "2018-championship",
+    category: "Villanova Basketball History",
+    answer: "The 2018 National Championship",
+    aliases: ["2018 national championship", "2018 championship", "2018 title", "villanova 2018"]
+  },
+  {
+    id: "mascot-will-d-cat",
+    category: "Villanova Traditions",
+    answer: "Will D. Cat",
+    aliases: ["will d cat", "will d. cat", "the wildcat", "villanova wildcat", "wildcat mascot", "will decat"]
+  },
+  {
+    id: "philly-big-5",
+    category: "Villanova Athletics",
+    answer: "The Philadelphia Big 5",
+    aliases: ["the philadelphia big 5", "philadelphia big 5", "the big 5", "big 5", "philly big 5"]
+  },
+  {
+    id: "mikal-bridges",
+    category: "Villanova Basketball Moments",
+    answer: "Mikal Bridges",
+    aliases: ["mikal bridges", "bridges"]
+  },
+  {
+    id: "school-colors",
+    category: "Villanova Traditions",
+    answer: "Navy Blue and White",
+    aliases: ["navy blue and white", "navy and white", "blue and white", "navy blue white"]
+  },
+  {
+    id: "jake-nevin-fieldhouse",
+    category: "Villanova Traditions",
+    answer: "Jake Nevin Fieldhouse",
+    aliases: ["jake nevin fieldhouse", "jake nevin field house", "nevin fieldhouse", "jake nevin"]
+  },
+  {
+    id: "villanova-stadium",
+    category: "Villanova Athletics",
+    answer: "Villanova Stadium",
+    aliases: ["villanova stadium", "the stadium", "villanova football stadium"]
+  }
+];
+
+// ------------------------------------------------------------
+// Same matching logic as nova-trivia.html
+// ------------------------------------------------------------
+function normalize(str) {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  const dp = [];
+  for (let i = 0; i <= m; i++) dp.push([i]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+  }
+  return dp[m][n];
+}
+
+function closeEnoughThreshold(normalizedAlias) {
+  return Math.max(1, Math.floor(normalizedAlias.length * 0.3));
+}
+
+function findBestAliasMatch(guess, aliases) {
+  const normGuess = normalize(guess);
+  let best = null;
+  for (const alias of aliases) {
+    const normAlias = normalize(alias);
+    const distance = levenshtein(normGuess, normAlias);
+    if (best === null || distance < best.distance) {
+      best = { alias, normAlias, distance };
+    }
+  }
+  return best;
+}
+
+function evaluateGuess(guess, subject) {
+  const best = findBestAliasMatch(guess, subject.aliases);
+  const threshold = closeEnoughThreshold(best.normAlias);
+  let verdict;
+  if (best.distance === 0) {
+    verdict = "correct";
+  } else if (best.distance <= threshold) {
+    verdict = "maybe";
+  } else {
+    verdict = "wrong";
+  }
+  return { verdict, best, threshold };
+}
+
+// ------------------------------------------------------------
+// Wiring up the page
+// ------------------------------------------------------------
+const subjectSelect = document.getElementById("subjectSelect");
+const acceptedList = document.getElementById("acceptedList");
+const guessInput = document.getElementById("guessInput");
+const resultDiv = document.getElementById("result");
+const detailDiv = document.getElementById("detail");
+
+SUBJECTS.forEach(function (subject, index) {
+  const opt = document.createElement("option");
+  opt.value = index;
+  opt.textContent = subject.answer + " (" + subject.category + ")";
+  subjectSelect.appendChild(opt);
+});
+
+function currentSubject() {
+  return SUBJECTS[parseInt(subjectSelect.value, 10)];
+}
+
+function renderAcceptedList() {
+  const subject = currentSubject();
+  acceptedList.textContent = "Answer: " + subject.answer + "\nAliases: " + subject.aliases.join(", ");
+}
+
+function checkGuess() {
+  const guess = guessInput.value;
+  if (!guess.trim()) {
+    resultDiv.textContent = "";
+    detailDiv.textContent = "";
+    return;
+  }
+
+  const subject = currentSubject();
+  const { verdict, best, threshold } = evaluateGuess(guess, subject);
+
+  if (verdict === "correct") {
+    resultDiv.textContent = "✅ CORRECT — exact match";
+  } else if (verdict === "maybe") {
+    resultDiv.textContent = '🤔 "Did you mean \'' + subject.answer + '\'?" (free confirm, no penalty)';
+  } else {
+    resultDiv.textContent = "❌ WRONG — not recognized, would advance to next clue";
+  }
+
+  detailDiv.textContent =
+    "Closest alias: \"" + best.alias + "\" — edit distance " + best.distance +
+    " (allowed up to " + threshold + " for a 'maybe')";
+}
+
+subjectSelect.addEventListener("change", function () {
+  renderAcceptedList();
+  resultDiv.textContent = "";
+  detailDiv.textContent = "";
+});
+document.getElementById("checkBtn").addEventListener("click", checkGuess);
+guessInput.addEventListener("keydown", function (e) {
+  if (e.key === "Enter") checkGuess();
+});
+
+renderAcceptedList();
+
+</script>
+
+</body>
+</html>
